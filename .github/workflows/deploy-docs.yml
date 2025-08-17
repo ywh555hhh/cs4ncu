@@ -1,4 +1,4 @@
-# 工作流名称，会显示在 GitHub Actions 页面
+# 正式部署文档到生产环境
 name: Deploy CS for NCU Docs
 
 # 工作流的触发条件
@@ -14,12 +14,74 @@ on:
 # 定义工作流所需的权限，以允许推送到 gh-pages 分支
 permissions:
   contents: write
+  pages: write
+  id-token: write
+
+# 避免并发部署
+concurrency:
+  group: pages-deployment
+  cancel-in-progress: false
 
 # 工作流中运行的任务
 jobs:
+  # 检查变更和清理旧预览
+  cleanup-old-previews:
+    name: 清理过期预览
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout gh-pages 分支
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          fetch-depth: 0
+
+      - name: 清理已关闭 PR 的预览
+        run: |
+          # 检查是否存在 pr-preview 目录
+          if [ ! -d "pr-preview" ]; then
+            echo "没有找到 pr-preview 目录，跳过清理"
+            exit 0
+          fi
+          
+          # 获取所有打开的 PR 编号
+          open_prs=$(curl -s "https://api.github.com/repos/${{ github.repository }}/pulls?state=open" | jq -r '.[].number')
+          
+          # 获取现有的预览目录
+          existing_previews=$(ls pr-preview/ 2>/dev/null || echo "")
+          
+          cleaned=false
+          for preview_dir in $existing_previews; do
+            if [[ "$preview_dir" =~ ^[0-9]+$ ]]; then
+              if ! echo "$open_prs" | grep -q "^$preview_dir$"; then
+                echo "清理已关闭 PR #$preview_dir 的预览"
+                rm -rf "pr-preview/$preview_dir"
+                cleaned=true
+              fi
+            fi
+          done
+          
+          if [ "$cleaned" = "true" ]; then
+            git config user.name github-actions
+            git config user.email github-actions@github.com
+            git add pr-preview/
+            if git diff --staged --quiet; then
+              echo "没有文件需要提交"
+            else
+              git commit -m "清理已关闭 PR 的预览目录"
+              git push
+            fi
+          else
+            echo "没有需要清理的预览目录"
+          fi
+
   deploy:
+    name: 部署到生产环境
+    needs: cleanup-old-previews
     # 运行此任务的虚拟机环境
     runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ steps.deployment.outputs.page_url }}
 
     # 任务中的步骤
     steps:
@@ -52,12 +114,37 @@ jobs:
 
       # 步骤 6: 构建文档网站 (使用 --strict 保证质量)
       - name: Build documentation
-        run: uv run mkdocs build --clean --strict
+        run: |
+          echo "🔨 开始构建生产环境文档..."
+          uv run mkdocs build --clean --strict
+          echo "✅ 生产环境文档构建成功！"
 
-      # 步骤 7: 部署到 GitHub Pages
+      # 步骤 7: 验证构建产物
+      - name: 验证构建产物
+        run: |
+          if [ ! -d "site" ]; then
+            echo "❌ 构建失败：site 目录不存在"
+            exit 1
+          fi
+          
+          if [ ! -f "site/index.html" ]; then
+            echo "❌ 构建失败：index.html 不存在"
+            exit 1
+          fi
+          
+          echo "✅ 构建产物验证通过"
+          echo "📊 生产构建统计:"
+          echo "- 总文件数: $(find site -type f | wc -l)"
+          echo "- HTML 文件数: $(find site -name "*.html" | wc -l)"
+          echo "- 总大小: $(du -sh site | cut -f1)"
+
+      # 步骤 8: 部署到 GitHub Pages
       # 这一步会自动将 `./site` 目录的内容推送到本仓库的 `gh-pages` 分支
       - name: Deploy to GitHub Pages
+        id: deployment
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./site
+          keep_files: true  # 保留 pr-preview 目录
+          exclude_assets: 'pr-preview/**'

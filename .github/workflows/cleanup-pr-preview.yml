@@ -1,0 +1,72 @@
+# PR 关闭时清理预览
+name: Cleanup PR Preview
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    name: 清理 PR 预览
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout gh-pages 分支
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          fetch-depth: 1
+
+      - name: 清理此 PR 的预览
+        run: |
+          pr_number="${{ github.event.number }}"
+          preview_path="pr-preview/$pr_number"
+          
+          if [ -d "$preview_path" ]; then
+            echo "清理 PR #$pr_number 的预览目录: $preview_path"
+            rm -rf "$preview_path"
+            
+            # 检查 pr-preview 目录是否为空，如果为空则删除
+            if [ -d "pr-preview" ] && [ -z "$(ls -A pr-preview)" ]; then
+              echo "pr-preview 目录为空，删除该目录"
+              rm -rf pr-preview
+            fi
+            
+            git config user.name github-actions
+            git config user.email github-actions@github.com
+            git add .
+            
+            if git diff --staged --quiet; then
+              echo "没有文件需要提交"
+            else
+              git commit -m "清理 PR #$pr_number 的预览"
+              git push
+              echo "✅ 已清理 PR #$pr_number 的预览"
+            fi
+          else
+            echo "PR #$pr_number 没有预览目录需要清理"
+          fi
+
+      - name: 添加清理完成评论
+        if: github.event.pull_request.merged == true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.payload.number;
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: `## 🧹 预览清理完成
+              
+              PR 已合并，相关的文档预览已自动清理。
+              
+              📖 **正式文档**: [查看最新版本](https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/)
+              
+              ---
+              <sub>🤖 此评论由 GitHub Actions 自动生成</sub>`
+            });

@@ -1,0 +1,292 @@
+# PR 预览和验证工作流
+name: PR Preview & Validation
+
+# 触发条件：PR 创建、更新或同步时
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+# 工作流权限
+permissions:
+  contents: read
+  pull-requests: write
+  pages: write
+  id-token: write
+
+# 避免并发运行相同 PR 的多个工作流
+concurrency:
+  group: pr-preview-${{ github.event.number }}
+  cancel-in-progress: true
+
+jobs:
+  # 检查是否需要构建文档
+  check-changes:
+    name: 检查文件变更
+    runs-on: ubuntu-latest
+    outputs:
+      docs-changed: ${{ steps.changes.outputs.docs }}
+      skip-build: ${{ steps.changes.outputs.skip }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 检查变更的文件
+        id: changes
+        run: |
+          # 获取变更的文件列表
+          changed_files=$(git diff --name-only origin/main...HEAD)
+          echo "Changed files:"
+          echo "$changed_files"
+          
+          # 检查是否有文档相关的变更
+          docs_changed=false
+          skip_build=false
+          
+          # 需要触发构建的文件类型
+          build_patterns=(
+            "docs/"
+            "mkdocs.yml"
+            "pyproject.toml"
+            "uv.lock"
+            "overrides/"
+            ".github/workflows/"
+            "README.md"
+          )
+          
+          # 可以跳过构建的文件类型（如果只有这些文件变更）
+          skip_patterns=(
+            "class0/"
+            "main.py"
+            ".gitignore"
+            ".mailmap"
+            ".python-version"
+            "drafts/"
+          )
+          
+          # 检查是否有需要构建的文件变更
+          for pattern in "${build_patterns[@]}"; do
+            if echo "$changed_files" | grep -q "^$pattern"; then
+              docs_changed=true
+              break
+            fi
+          done
+          
+          # 如果没有文档相关变更，检查是否只有可跳过的文件变更
+          if [ "$docs_changed" = "false" ]; then
+            all_skippable=true
+            while IFS= read -r file; do
+              if [ -n "$file" ]; then
+                is_skippable=false
+                for pattern in "${skip_patterns[@]}"; do
+                  if [[ "$file" == $pattern* ]]; then
+                    is_skippable=true
+                    break
+                  fi
+                done
+                if [ "$is_skippable" = "false" ]; then
+                  all_skippable=false
+                  break
+                fi
+              fi
+            done <<< "$changed_files"
+            
+            if [ "$all_skippable" = "true" ]; then
+              skip_build=true
+            fi
+          fi
+          
+          echo "docs=$docs_changed" >> $GITHUB_OUTPUT
+          echo "skip=$skip_build" >> $GITHUB_OUTPUT
+          echo "文档相关变更: $docs_changed"
+          echo "跳过构建: $skip_build"
+
+  # 构建和验证文档
+  build-and-validate:
+    name: 构建验证文档
+    needs: check-changes
+    if: needs.check-changes.outputs.skip-build != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: 安装 uv
+        run: pipx install uv
+
+      - name: 配置依赖缓存
+        uses: actions/cache@v4
+        with:
+          path: ./.venv
+          key: ${{ runner.os }}-uv-${{ hashFiles('**/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-
+
+      - name: 安装依赖
+        run: uv sync
+
+      - name: 构建文档（严格模式）
+        run: |
+          echo "🔨 开始构建文档..."
+          uv run mkdocs build --clean --strict
+          echo "✅ 文档构建成功！"
+
+      - name: 检查构建产物
+        run: |
+          if [ ! -d "site" ]; then
+            echo "❌ 构建失败：site 目录不存在"
+            exit 1
+          fi
+          
+          if [ ! -f "site/index.html" ]; then
+            echo "❌ 构建失败：index.html 不存在"
+            exit 1
+          fi
+          
+          echo "✅ 构建产物检查通过"
+          echo "📊 构建统计:"
+          echo "- 总文件数: $(find site -type f | wc -l)"
+          echo "- HTML 文件数: $(find site -name "*.html" | wc -l)"
+          echo "- 总大小: $(du -sh site | cut -f1)"
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-preview-${{ github.event.number }}
+          path: site/
+          retention-days: 7
+
+  # 部署预览（如果是 fork 仓库的 PR，则跳过）
+  deploy-preview:
+    name: 部署预览
+    needs: [check-changes, build-and-validate]
+    if: |
+      needs.check-changes.outputs.skip-build != 'true' && 
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    environment:
+      name: pr-preview-${{ github.event.number }}
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: 下载构建产物
+        uses: actions/download-artifact@v4
+        with:
+          name: pr-preview-${{ github.event.number }}
+          path: site/
+
+      - name: 部署到 GitHub Pages
+        id: deploy
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
+          destination_dir: pr-preview/${{ github.event.number }}
+          keep_files: false
+
+      - name: 添加预览链接评论
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.payload.number;
+            const previewUrl = `https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/pr-preview/${prNumber}/`;
+            
+            // 查找现有的预览评论
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber
+            });
+            
+            const botComment = comments.data.find(comment => 
+              comment.user.type === 'Bot' && 
+              comment.body.includes('📖 文档预览')
+            );
+            
+            const commentBody = `## 📖 文档预览已就绪！
+            
+            ✅ **构建状态**: 成功
+            🔗 **预览链接**: [点击查看预览](${previewUrl})
+            🕒 **最后更新**: ${new Date().toLocaleString('zh-CN', {timeZone: 'Asia/Shanghai'})}
+            
+            > 💡 预览会在 PR 关闭后自动清理。此预览反映了当前 PR 的最新变更。
+            
+            ---
+            <sub>🤖 此评论由 GitHub Actions 自动生成</sub>`;
+            
+            if (botComment) {
+              // 更新现有评论
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: commentBody
+              });
+            } else {
+              // 创建新评论
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: commentBody
+              });
+            }
+
+  # 通知构建结果
+  notify-result:
+    name: 通知结果
+    needs: [check-changes, build-and-validate]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: 通知跳过构建
+        if: needs.check-changes.outputs.skip-build == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.payload.number;
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: `## ⏭️ 跳过文档构建
+              
+              此 PR 没有包含需要重新构建文档的变更。
+              
+              📋 **变更类型**: 代码或配置文件
+              ⚡ **操作**: 跳过文档构建以节省资源
+              
+              ---
+              <sub>🤖 此消息由智能文件检测生成</sub>`
+            });
+
+      - name: 通知构建失败
+        if: needs.build-and-validate.result == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.payload.number;
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: `## ❌ 文档构建失败
+              
+              PR 中的变更导致文档构建失败，请检查并修复问题。
+              
+              🔍 **建议操作**:
+              1. 查看 [Actions 日志](${context.payload.pull_request.html_url}/checks) 了解具体错误
+              2. 在本地运行 \`uv run mkdocs build --strict\` 复现问题
+              3. 修复错误后重新推送
+              
+              ---
+              <sub>🤖 此评论由 GitHub Actions 自动生成</sub>`
+            });
