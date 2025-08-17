@@ -1564,10 +1564,52 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="main 分支的核心保护规则">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pull-request" class="md-nav__link">
+    <span class="md-ellipsis">
+      所有变更必须通过拉取请求 (Pull Request)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pr" class="md-nav__link">
+    <span class="md-ellipsis">
+      PR 必须经过审查批准
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      更新后需要重新审查
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      保持干净、线性的提交历史
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
-  <a href="#_1" class="md-nav__link">
+  <a href="#_3" class="md-nav__link">
     <span class="md-ellipsis">
       标准贡献流程
     </span>
@@ -1720,6 +1762,29 @@
   
   <span class="md-ellipsis">
     调整提示框样式
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../figure/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    调整图片样式
     
   </span>
   
@@ -2051,10 +2116,52 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="main 分支的核心保护规则">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pull-request" class="md-nav__link">
+    <span class="md-ellipsis">
+      所有变更必须通过拉取请求 (Pull Request)
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pr" class="md-nav__link">
+    <span class="md-ellipsis">
+      PR 必须经过审查批准
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      更新后需要重新审查
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      保持干净、线性的提交历史
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
-  <a href="#_1" class="md-nav__link">
+  <a href="#_3" class="md-nav__link">
     <span class="md-ellipsis">
       标准贡献流程
     </span>
@@ -2127,30 +2234,30 @@
 <p>为了保持 <code>main</code> 分支的绝对稳定和项目历史的清晰，我们建立了一套明确的协作流程。</p>
 <p>这些不仅仅是口头约定，它们由 GitHub 的分支保护规则强制执行，以确保一个对<strong>所有人（包括项目管理员）</strong>都公平、一致的贡献环境。</p>
 <hr />
-<h3 id="main"><code>main</code> 分支的核心保护规则<a class="headerlink" href="#main" title="Permanent link">&para;</a></h3>
+<h2 id="main"><code>main</code> 分支的核心保护规则<a class="headerlink" href="#main" title="Permanent link">&para;</a></h2>
 <p>我们的 <code>main</code> 分支受到以下 GitHub 设置的保护：</p>
-<p><strong>1. 所有变更必须通过拉取请求 (Pull Request)</strong></p>
+<h3 id="pull-request">所有变更必须通过拉取请求 (Pull Request)<a class="headerlink" href="#pull-request" title="Permanent link">&para;</a></h3>
 <p>我们不允许任何人直接向 <code>main</code> 分支推送代码。所有修改，无论大小，都必须通过 PR 的方式提交，以便进行讨论和审查。</p>
 <ul>
 <li><strong>GitHub 设置</strong>: <code>Require a pull request before merging</code> 已启用。</li>
 </ul>
-<p><strong>2. PR 必须经过审查批准</strong></p>
+<h3 id="pr">PR 必须经过审查批准<a class="headerlink" href="#pr" title="Permanent link">&para;</a></h3>
 <p>一个 PR 在合并前，必须获得至少一名项目维护者的审查和明确批准 (Approve)。这确保了每一行代码都经过了复核。</p>
 <ul>
 <li><strong>GitHub 设置</strong>: <code>Require approvals</code> 已设置为 1。</li>
 </ul>
-<p><strong>3. 更新后需要重新审查</strong></p>
+<h3 id="_1">更新后需要重新审查<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h3>
 <p>如果一个 PR 在被批准后，贡献者又推送了新的代码，那么之前的批准状态会自动失效。这保证了最终合并的代码就是被审查过的代码。</p>
 <ul>
 <li><strong>GitHub 设置</strong>: <code>Dismiss stale pull request approvals when new commits are pushed</code> 已启用。</li>
 </ul>
-<p><strong>4. 保持干净、线性的提交历史</strong></p>
+<h3 id="_2">保持干净、线性的提交历史<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h3>
 <p>我们通过“压缩合并”的方式来合并 PR。这意味着一个 PR 中的多次零散提交（比如“修复错字”、“调整格式”）会被合并成一个有意义的、完整的提交记录，最终进入 <code>main</code> 分支。</p>
 <ul>
 <li><strong>GitHub 设置</strong>: <code>Require linear history</code> 已启用，我们约定使用 <strong>Squash and merge</strong>。</li>
 </ul>
 <hr />
-<h3 id="_1">标准贡献流程<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h3>
+<h2 id="_3">标准贡献流程<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h2>
 <p>这是将你的贡献融入项目的唯一路径，对所有人都一样：</p>
 <ol>
 <li><strong>Fork</strong> 仓库到你自己的 GitHub 账户。</li>
